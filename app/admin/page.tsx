@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { Eye, EyeOff, Plus, Trash2, ToggleLeft, ToggleRight, Upload, X, RefreshCw } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,54 +12,36 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { allKeralaProducts } from "@/data/kerala-products"
+import { ProductCard } from "@/components/admin/ProductCard"
+import { CustomerCard } from "@/components/admin/CustomerCard"
+
+import { Product } from "@/types/product"
+
+import { useProducts } from "@/hooks/use-products"
+import { useCustomers } from "@/hooks/use-customers"
+import { useBanner } from "@/hooks/use-banner"
+import { useToast } from "@/hooks/use-toast"
+
 import Image from "next/image"
 
-interface Product {
-  id: number
-  name: string
-  malayalamName: string
-  price: number
-  marketPrice: number
-  unit: string
-  image: string
-  imageUrl?: string
-  category: "vegetable" | "fruit"
-  description: string
-  inStock: boolean
-  createdAt?: string
-  updatedAt?: string
-}
-
-interface CustomerInfo {
-  name: string
-  mobile: string
-  place: string
-  landmark: string
-  loyaltyPoints: number
-  orderCount: number
-  createdAt?: string
-  lastOrderAt?: string
-}
 
 export default function AdminPanel() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(true)
   const [credentials, setCredentials] = useState({ username: "", password: "" })
   const [showPassword, setShowPassword] = useState(false)
-  const [products, setProducts] = useState<Product[]>([])
-  const [customers, setCustomers] = useState<CustomerInfo[]>([])
-  const [bannerText, setBannerText] = useState("")
   const [isAddProductOpen, setIsAddProductOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [isEditImageOpen, setIsEditImageOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const editFileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
-
   const [selectedAdminCategory, setSelectedAdminCategory] = useState<"all" | "vegetable" | "fruit" | "no-image">("all")
+
+  // Use repositories/hooks for data
+  const { products, add, update, remove, setAll, reload: reloadProducts } = useProducts()
+  const { customers, reload: reloadCustomers } = useCustomers()
+  const { banner, setBanner, reload: reloadBanner } = useBanner()
 
   // Filter products for admin view
   const filteredAdminProducts = products.filter((product) => {
@@ -67,49 +50,28 @@ export default function AdminPanel() {
     return product.category === selectedAdminCategory
   })
 
-  const [newProduct, setNewProduct] = useState({
+  // New product state
+  const [newProduct, setNewProduct] = useState<Product>({
+    id: 0,
     name: "",
     malayalamName: "",
     price: 0,
     marketPrice: 0,
     unit: "kg",
-    category: "vegetable" as "vegetable" | "fruit",
+    category: "vegetable",
     description: "",
     inStock: true,
+    image: "/placeholder.svg?height=200&width=200",
     imageUrl: "",
+    createdAt: undefined,
+    updatedAt: undefined,
   })
-
-  // Load products from localStorage or use Kerala products
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem("grameenMartProducts")
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts))
-    } else {
-      // Convert Kerala products to the format expected by the app
-      const convertedProducts = allKeralaProducts.map((product) => ({
-        ...product,
-        image: "/placeholder.svg?height=200&width=200",
-        imageUrl: "/placeholder.svg?height=200&width=200",
-        createdAt: new Date().toISOString(),
-      }))
-      setProducts(convertedProducts)
-      localStorage.setItem("grameenMartProducts", JSON.stringify(convertedProducts))
-    }
-  }
 
   // Load data on component mount
   useEffect(() => {
-    loadProducts()
-
-    const savedCustomers = localStorage.getItem("grameenMartCustomers")
-    const savedBanner = localStorage.getItem("grameenMartBanner")
-
-    if (savedCustomers) {
-      setCustomers(JSON.parse(savedCustomers))
-    }
-    if (savedBanner) {
-      setBannerText(savedBanner)
-    }
+    reloadProducts()
+    reloadCustomers()
+    reloadBanner()
   }, [])
 
   const handleLogin = () => {
@@ -128,16 +90,7 @@ export default function AdminPanel() {
     }
   }
 
-  const saveData = () => {
-    localStorage.setItem("grameenMartProducts", JSON.stringify(products))
-    localStorage.setItem("grameenMartBanner", bannerText)
-    localStorage.setItem("grameenMartCustomers", JSON.stringify(customers))
-    toast({
-      title: "Data Saved",
-      description: "All changes have been saved successfully",
-    })
-  }
-
+  // Image upload logic (shared for add/edit)
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -202,7 +155,8 @@ export default function AdminPanel() {
     })
   }
 
-  const addProduct = () => {
+  // Add product using repository
+  const addProduct = async () => {
     if (!newProduct.name || !newProduct.malayalamName || !newProduct.price) {
       toast({
         title: "Missing Information",
@@ -213,17 +167,15 @@ export default function AdminPanel() {
     }
 
     const product: Product = {
-      id: Date.now(),
       ...newProduct,
+      id: Date.now(),
       image: "/placeholder.svg?height=200&width=200",
       createdAt: new Date().toISOString(),
     }
 
-    const updatedProducts = [...products, product]
-    setProducts(updatedProducts)
-    localStorage.setItem("grameenMartProducts", JSON.stringify(updatedProducts))
-
+    await add(product)
     setNewProduct({
+      id: 0,
       name: "",
       malayalamName: "",
       price: 0,
@@ -232,7 +184,10 @@ export default function AdminPanel() {
       category: "vegetable",
       description: "",
       inStock: true,
+      image: "/placeholder.svg?height=200&width=200",
       imageUrl: "",
+      createdAt: undefined,
+      updatedAt: undefined,
     })
     setIsAddProductOpen(false)
 
@@ -246,19 +201,16 @@ export default function AdminPanel() {
     })
   }
 
-  const updateProduct = (id: number, updates: Partial<Product>) => {
-    const updatedProducts = products.map((p) =>
-      p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p,
-    )
-    setProducts(updatedProducts)
-    localStorage.setItem("grameenMartProducts", JSON.stringify(updatedProducts))
-
+  // Update product using repository
+  const updateProduct = async (id: number, updates: Partial<Product>) => {
+    await update(id, updates)
     toast({
       title: "Product Updated",
       description: "Product has been updated successfully",
     })
   }
 
+  // Save edited product
   const saveEditedProduct = () => {
     if (editingProduct) {
       updateProduct(editingProduct.id, editingProduct)
@@ -271,35 +223,32 @@ export default function AdminPanel() {
     }
   }
 
-  const deleteProduct = (id: number) => {
-    const updatedProducts = products.filter((p) => p.id !== id)
-    setProducts(updatedProducts)
-    localStorage.setItem("grameenMartProducts", JSON.stringify(updatedProducts))
+  // Delete product using repository
+  const deleteProduct = async (id: number) => {
+    await remove(id)
     toast({
       title: "Product Deleted",
       description: "Product has been deleted successfully",
     })
   }
 
-  const toggleStock = (id: number) => {
+  // Toggle stock
+  const toggleStock = async (id: number) => {
     const product = products.find((p) => p.id === id)
     if (product) {
-      updateProduct(id, { inStock: !product.inStock })
+      await update(id, { inStock: !product.inStock })
     }
   }
 
-  const loadKeralaProducts = () => {
-    const convertedProducts = allKeralaProducts.map((product) => ({
-      ...product,
-      image: "/placeholder.svg?height=200&width=200",
-      imageUrl: "/placeholder.svg?height=200&width=200",
-      createdAt: new Date().toISOString(),
-    }))
-    setProducts(convertedProducts)
-    localStorage.setItem("grameenMartProducts", JSON.stringify(convertedProducts))
+
+  // Save all data
+  const saveData = async () => {
+    await setAll(products)
+    setBanner(banner)
+    // Customers are managed by their own repository
     toast({
-      title: "Kerala Products Loaded",
-      description: `Loaded ${convertedProducts.length} authentic Kerala products`,
+      title: "Data Saved",
+      description: "All changes have been saved successfully",
     })
   }
 
@@ -377,7 +326,7 @@ export default function AdminPanel() {
               </div>
             </button>
             <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm" onClick={loadProducts} className="text-white hover:bg-green-700">
+              <Button variant="ghost" size="sm" onClick={reloadProducts} className="text-white hover:bg-green-700">
                 <RefreshCw className="w-4 h-4" />
               </Button>
               <Button onClick={saveData} variant="secondary">
@@ -404,12 +353,12 @@ export default function AdminPanel() {
                 <Textarea
                   id="banner"
                   placeholder="Enter banner text for offers"
-                  value={bannerText}
-                  onChange={(e) => setBannerText(e.target.value)}
+                  value={banner}
+                  onChange={(e) => setBanner(e.target.value)}
                 />
               </div>
               <div className="bg-red-600 text-white text-center py-2 px-4 rounded">
-                <p className="text-sm font-medium">{bannerText || "Banner preview will appear here"}</p>
+                <p className="text-sm font-medium">{banner || "Banner preview will appear here"}</p>
               </div>
             </div>
           </CardContent>
@@ -421,9 +370,6 @@ export default function AdminPanel() {
             <div className="flex items-center justify-between">
               <CardTitle>Product Management ({products.length} products)</CardTitle>
               <div className="flex items-center space-x-2">
-                <Button variant="outline" onClick={loadKeralaProducts} className="flex items-center space-x-2">
-                  <span>Load Kerala Products</span>
-                </Button>
                 <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
                   <DialogTrigger asChild>
                     <Button className="bg-green-600 hover:bg-green-700">
@@ -609,196 +555,17 @@ export default function AdminPanel() {
             {/* Products Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredAdminProducts.map((product) => (
-                <Card key={product.id} className="overflow-hidden">
-                  <div className="relative">
-                    <Image
-                      src={product.imageUrl || product.image || "/placeholder.svg"}
-                      alt={product.name}
-                      width={300}
-                      height={200}
-                      className="w-full h-40 object-cover"
-                    />
-                    {!product.imageUrl && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                        <span className="text-white text-sm font-medium">No Image</span>
-                      </div>
-                    )}
-                    <div className="absolute top-2 right-2">
-                      <Badge variant={product.category === "vegetable" ? "default" : "secondary"}>
-                        {product.category}
-                      </Badge>
-                    </div>
-                    {!product.inStock && (
-                      <div className="absolute bottom-2 left-2">
-                        <Badge variant="destructive">Out of Stock</Badge>
-                      </div>
-                    )}
-                  </div>
-
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-semibold text-lg">{product.name}</h4>
-                        <p className="text-sm text-gray-600">{product.malayalamName}</p>
-                        <p className="text-xs text-gray-500 mt-1">{product.description}</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">GM Price</Label>
-                          <Input
-                            type="number"
-                            value={product.price}
-                            onChange={(e) => updateProduct(product.id, { price: Number(e.target.value) })}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Market Price</Label>
-                          <Input
-                            type="number"
-                            value={product.marketPrice}
-                            onChange={(e) => updateProduct(product.id, { marketPrice: Number(e.target.value) })}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">
-                          ₹{product.price}/{product.unit}
-                        </span>
-                        <span className="text-xs text-gray-500">Save ₹{product.marketPrice - product.price}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-
-                  <div className="p-4 pt-0 space-y-2">
-                    {/* Stock Toggle */}
-                    <Button
-                      size="sm"
-                      variant={product.inStock ? "default" : "destructive"}
-                      onClick={() => toggleStock(product.id)}
-                      className="w-full"
-                    >
-                      {product.inStock ? (
-                        <>
-                          <ToggleRight className="w-4 h-4 mr-1" />
-                          In Stock
-                        </>
-                      ) : (
-                        <>
-                          <ToggleLeft className="w-4 h-4 mr-1" />
-                          Out of Stock
-                        </>
-                      )}
-                    </Button>
-
-                    {/* Action Buttons */}
-                    <div className="flex space-x-2">
-                      <Dialog
-                        open={isEditImageOpen && editingProduct?.id === product.id}
-                        onOpenChange={setIsEditImageOpen}
-                      >
-                        <DialogTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditingProduct(product)}
-                            className="flex-1"
-                          >
-                            <Upload className="w-4 h-4 mr-1" />
-                            {product.imageUrl ? "Change" : "Add"} Photo
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-md">
-                          <DialogHeader>
-                            <DialogTitle>{editingProduct?.imageUrl ? "Change" : "Add"} Product Image</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label>
-                                Product: {editingProduct?.name} ({editingProduct?.malayalamName})
-                              </Label>
-                            </div>
-
-                            <div>
-                              <Label>Current Image</Label>
-                              <div className="relative">
-                                <Image
-                                  src={editingProduct?.imageUrl || editingProduct?.image || "/placeholder.svg"}
-                                  alt={editingProduct?.name || "Product"}
-                                  width={300}
-                                  height={200}
-                                  className="w-full rounded-lg object-cover border"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                              <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                              <p className="text-sm text-gray-600 mb-2">Upload Product Image</p>
-                              <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="mt-2"
-                                onClick={() => editFileInputRef.current?.click()}
-                              >
-                                <Upload className="w-4 h-4 mr-2" />
-                                Choose File
-                              </Button>
-                              <input
-                                ref={editFileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => handleImageUpload(e, true)}
-                                className="hidden"
-                              />
-                            </div>
-
-                            <div className="flex space-x-2">
-                              <Button onClick={saveEditedProduct} className="flex-1">
-                                Save Changes
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingProduct(null)
-                                  setIsEditImageOpen(false)
-                                }}
-                                className="flex-1"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-
-                            {editingProduct?.imageUrl && (
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => removeImage(true)}
-                                className="w-full"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Remove Image
-                              </Button>
-                            )}
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deleteProduct(product.id)}
-                        className="px-3"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onUpdate={() => {
+                    setEditingProduct(product)
+                    setIsEditImageOpen(true)
+                  }}
+                  onDelete={() => deleteProduct(product.id)}
+                  onToggleStock={() => toggleStock(product.id)}
+                  onEditImage={() => { }}
+                />
               ))}
             </div>
 
@@ -818,40 +585,7 @@ export default function AdminPanel() {
           <CardContent>
             <div className="space-y-4 max-h-96 overflow-y-auto">
               {customers.map((customer, index) => (
-                <div key={index} className="border rounded-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <h4 className="font-medium">{customer.name}</h4>
-                      <p className="text-sm text-gray-600">📱 {customer.mobile}</p>
-                      {customer.createdAt && (
-                        <p className="text-xs text-gray-500">
-                          Joined: {new Date(customer.createdAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm">📍 {customer.place}</p>
-                      {customer.landmark && <p className="text-sm text-gray-600">🏛️ {customer.landmark}</p>}
-                      {customer.lastOrderAt && (
-                        <p className="text-xs text-gray-500">
-                          Last order: {new Date(customer.lastOrderAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center justify-end space-x-4">
-                        <div className="text-center">
-                          <p className="text-sm font-medium text-yellow-600">⭐ {customer.loyaltyPoints}</p>
-                          <p className="text-xs text-gray-500">Points</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm font-medium text-green-600">📦 {customer.orderCount}</p>
-                          <p className="text-xs text-gray-500">Orders</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CustomerCard key={index} customer={customer} />
               ))}
             </div>
           </CardContent>
