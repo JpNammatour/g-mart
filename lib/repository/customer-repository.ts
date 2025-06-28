@@ -1,40 +1,46 @@
 import { CustomerInfo } from "@/types/customer";
 import { DataClient } from "./data-client";
+import { supabase } from "@/lib/supabase";
 
 export class CustomerRepository extends DataClient<CustomerInfo> {
-  private storageKey = "grameenMartCustomers";
+  private table = "customers";
 
   async getAll(): Promise<CustomerInfo[]> {
-    const data = localStorage.getItem(this.storageKey);
-    return data ? JSON.parse(data) : [];
+    const { data, error } = await supabase.from(this.table).select("*");
+    if (error) throw new Error(error.message);
+    return data as CustomerInfo[];
   }
 
   async getById(mobile: string): Promise<CustomerInfo | undefined> {
-    const all = await this.getAll();
-    return all.find((c) => c.mobile === mobile);
+    const { data, error } = await supabase
+      .from(this.table)
+      .select("*")
+      .eq("mobile", mobile)
+      .single();
+    if (error) throw new Error(error.message);
+    return data as CustomerInfo;
   }
 
   async add(item: CustomerInfo): Promise<void> {
-    const all = await this.getAll();
-    all.push(item);
-    localStorage.setItem(this.storageKey, JSON.stringify(all));
+    const { error } = await supabase.from(this.table).insert([item]);
+    if (error) throw new Error(error.message);
   }
 
   async update(mobile: string, updates: Partial<CustomerInfo>): Promise<void> {
-    const all = await this.getAll();
-    const updated = all.map((c) =>
-      c.mobile === mobile ? { ...c, ...updates } : c
-    );
-    localStorage.setItem(this.storageKey, JSON.stringify(updated));
+    const { error } = await supabase
+      .from(this.table)
+      .update(updates)
+      .eq("mobile", mobile);
+    if (error) throw new Error(error.message);
   }
 
   async delete(mobile: string): Promise<void> {
-    const all = await this.getAll();
-    const filtered = all.filter((c) => c.mobile !== mobile);
-    localStorage.setItem(this.storageKey, JSON.stringify(filtered));
+    const { error } = await supabase.from(this.table).delete().eq("mobile", mobile);
+    if (error) throw new Error(error.message);
   }
 
   async setAll(customers: CustomerInfo[]): Promise<void> {
-    localStorage.setItem(this.storageKey, JSON.stringify(customers));
+    // Optional: implement bulk upsert if needed
+    await supabase.from(this.table).upsert(customers);
   }
 }

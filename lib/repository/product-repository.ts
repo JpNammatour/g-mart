@@ -1,43 +1,40 @@
 import { Product } from "@/types/product";
 import { DataClient } from "./data-client";
-import { allKeralaProducts } from "@/data/kerala-products";
+import { supabase } from "@/lib/supabase";
 
 
 export class ProductRepository extends DataClient<Product> {
-    private storageKey = "grameenMartProducts";
+    private table = "products";
 
     async getAll(): Promise<Product[]> {
-        // const data = localStorage.getItem(this.storageKey);
-        // return data ? JSON.parse(data) : [];
-        return allKeralaProducts as Product[];
+        const { data, error } = await supabase.from(this.table).select();
+        if (error) throw new Error(error.message);
+        return data as Product[];
     }
 
     async getById(id: number): Promise<Product | undefined> {
-        const all = await this.getAll();
-        return all.find((p) => p.id === id);
+        const { data, error } = await supabase.from(this.table).select("*").eq("id", id).single();
+        if (error) throw new Error(error.message);
+        return data as Product;
     }
 
     async add(item: Product): Promise<void> {
-        const all = await this.getAll();
-        all.push(item);
-        localStorage.setItem(this.storageKey, JSON.stringify(all));
+        const { error } = await supabase.from(this.table).insert([item]);
+        if (error) throw new Error(error.message);
     }
 
     async update(id: number, updates: Partial<Product>): Promise<void> {
-        const all = await this.getAll();
-        const updated = all.map((p) =>
-            p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-        );
-        localStorage.setItem(this.storageKey, JSON.stringify(updated));
+        const { error } = await supabase.from(this.table).update(updates).eq("id", id);
+        if (error) throw new Error(error.message);
     }
 
     async delete(id: number): Promise<void> {
-        const all = await this.getAll();
-        const filtered = all.filter((p) => p.id !== id);
-        localStorage.setItem(this.storageKey, JSON.stringify(filtered));
+        const { error } = await supabase.from(this.table).delete().eq("id", id);
+        if (error) throw new Error(error.message);
     }
 
     async setAll(products: Product[]): Promise<void> {
-        localStorage.setItem(this.storageKey, JSON.stringify(products));
+        // Optional: implement bulk upsert if needed
+        await supabase.from(this.table).upsert(products);
     }
 }
