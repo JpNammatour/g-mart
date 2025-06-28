@@ -1,40 +1,67 @@
 import { Product } from "@/types/product";
 import { DataClient } from "./data-client";
-import { supabase } from "@/lib/supabase";
 
 
 export class ProductRepository extends DataClient<Product> {
     private table = "products";
 
     async getAll(): Promise<Product[]> {
-        const { data, error } = await supabase.from(this.table).select();
-        if (error) throw new Error(error.message);
-        return data as Product[];
+        const res = await fetch('/api/supabase-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getAll', table: this.table })
+        });
+        const { result, error } = await res.json();
+        if (error) throw new Error(error);
+        return result as Product[];
     }
 
     async getById(id: number): Promise<Product | undefined> {
-        const { data, error } = await supabase.from(this.table).select("*").eq("id", id).single();
-        if (error) throw new Error(error.message);
-        return data as Product;
+        const res = await fetch('/api/supabase-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getById', table: this.table, id })
+        });
+        const { result, error } = await res.json();
+        if (error) throw new Error(error);
+        return result as Product;
     }
 
     async add(item: Product): Promise<void> {
-        const { error } = await supabase.from(this.table).insert([item]);
-        if (error) throw new Error(error.message);
+        const res = await fetch('/api/supabase-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add', table: this.table, payload: item })
+        });
+        const { error } = await res.json();
+        if (error) throw new Error(error);
     }
 
     async update(id: number, updates: Partial<Product>): Promise<void> {
-        const { error } = await supabase.from(this.table).update(updates).eq("id", id);
-        if (error) throw new Error(error.message);
+        const res = await fetch('/api/supabase-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update', table: this.table, id, payload: { updates } })
+        });
+        const { error } = await res.json();
+        if (error) throw new Error(error);
     }
 
     async delete(id: number): Promise<void> {
-        const { error } = await supabase.from(this.table).delete().eq("id", id);
-        if (error) throw new Error(error.message);
+        const res = await fetch('/api/supabase-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', table: this.table, id })
+        });
+        const { error } = await res.json();
+        if (error) throw new Error(error);
     }
 
     async setAll(products: Product[]): Promise<void> {
-        // Optional: implement bulk upsert if needed
-        await supabase.from(this.table).upsert(products);
+        await fetch('/api/supabase-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'setAll', table: this.table, payload: products })
+        });
     }
 }

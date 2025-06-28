@@ -1,46 +1,66 @@
 import { CustomerInfo } from "@/types/customer";
 import { DataClient } from "./data-client";
-import { supabase } from "@/lib/supabase";
 
 export class CustomerRepository extends DataClient<CustomerInfo> {
   private table = "customers";
 
   async getAll(): Promise<CustomerInfo[]> {
-    const { data, error } = await supabase.from(this.table).select("*");
-    if (error) throw new Error(error.message);
-    return data as CustomerInfo[];
+    const res = await fetch('/api/supabase-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'getAll', table: this.table })
+    });
+    const { result, error } = await res.json();
+    if (error) throw new Error(error);
+    return result as CustomerInfo[];
   }
 
   async getById(mobile: string): Promise<CustomerInfo | undefined> {
-    const { data, error } = await supabase
-      .from(this.table)
-      .select("*")
-      .eq("mobile", mobile)
-      .single();
-    if (error) throw new Error(error.message);
-    return data as CustomerInfo;
+    const res = await fetch('/api/supabase-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'getById', table: this.table, mobile })
+    });
+    const { result, error } = await res.json();
+    if (error) throw new Error(error);
+    return result as CustomerInfo;
   }
 
   async add(item: CustomerInfo): Promise<void> {
-    const { error } = await supabase.from(this.table).insert([item]);
-    if (error) throw new Error(error.message);
+    const res = await fetch('/api/supabase-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', table: this.table, payload: item })
+    });
+    const { error } = await res.json();
+    if (error) throw new Error(error);
   }
 
   async update(mobile: string, updates: Partial<CustomerInfo>): Promise<void> {
-    const { error } = await supabase
-      .from(this.table)
-      .update(updates)
-      .eq("mobile", mobile);
-    if (error) throw new Error(error.message);
+    const res = await fetch('/api/supabase-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update', table: this.table, mobile, payload: { updates } })
+    });
+    const { error } = await res.json();
+    if (error) throw new Error(error);
   }
 
   async delete(mobile: string): Promise<void> {
-    const { error } = await supabase.from(this.table).delete().eq("mobile", mobile);
-    if (error) throw new Error(error.message);
+    const res = await fetch('/api/supabase-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', table: this.table, mobile })
+    });
+    const { error } = await res.json();
+    if (error) throw new Error(error);
   }
 
   async setAll(customers: CustomerInfo[]): Promise<void> {
-    // Optional: implement bulk upsert if needed
-    await supabase.from(this.table).upsert(customers);
+    await fetch('/api/supabase-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setAll', table: this.table, payload: customers })
+    });
   }
 }
