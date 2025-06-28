@@ -11,44 +11,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { allKeralaProducts } from "@/data/kerala-products"
 import Image from "next/image"
+import { useProducts } from "@/hooks/use-products"
+import { useBanner } from "@/hooks/use-banner"
+import { useCustomers } from "@/hooks/use-customers"
 
-interface Product {
-  id: number
-  name: string
-  malayalamName: string
-  price: number
-  marketPrice: number
-  unit: string
-  image: string
-  imageUrl?: string
-  category: "vegetable" | "fruit"
-  description: string
-  inStock: boolean
-  createdAt?: string
-  updatedAt?: string
-}
-
-interface CartItem extends Product {
-  quantity: number
-  selectedUnit: string
-  actualQuantity: number
-}
-
-interface CustomerInfo {
-  name: string
-  mobile: string
-  place: string
-  landmark: string
-  loyaltyPoints: number
-  orderCount: number
-  createdAt?: string
-  lastOrderAt?: string
-}
+import { CartItem } from "@/types/cart-item"
+import { Product } from "@/types/product"
+import { CustomerInfo } from "@/types/customer"
 
 export default function GrameenMart() {
-  const [products, setProducts] = useState<Product[]>([])
+  // Use repository hooks for products, customers, and banner
+  const { products, reload: reloadProducts } = useProducts()
+  const { customers, setAll: setAllCustomers, reload: reloadCustomers } = useCustomers()
+  const { banner, setBanner, reload: reloadBanner } = useBanner()
+
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCategory, setSelectedCategory] = useState<"all" | "vegetable" | "fruit">("all")
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
@@ -60,44 +37,9 @@ export default function GrameenMart() {
     orderCount: 0,
   })
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
-  const [bannerText, setBannerText] = useState("🎉 Special Offer: Free delivery on orders above ₹500! 🎉")
-  const [customers, setCustomers] = useState<CustomerInfo[]>([])
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
   const { toast } = useToast()
 
-  // Load products from localStorage or use Kerala products
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem("grameenMartProducts")
-    if (savedProducts) {
-      const parsedProducts = JSON.parse(savedProducts)
-      setProducts(parsedProducts)
-    } else {
-      // Convert Kerala products to the format expected by the app
-      const convertedProducts = allKeralaProducts.map((product) => ({
-        ...product,
-        image: "/placeholder.svg?height=200&width=200",
-        imageUrl: "/placeholder.svg?height=200&width=200",
-        createdAt: new Date().toISOString(),
-      }))
-      setProducts(convertedProducts)
-      localStorage.setItem("grameenMartProducts", JSON.stringify(convertedProducts))
-    }
-  }
-
-  // Load data on component mount
-  useEffect(() => {
-    loadProducts()
-
-    const savedCustomers = localStorage.getItem("grameenMartCustomers")
-    const savedBanner = localStorage.getItem("grameenMartBanner")
-
-    if (savedCustomers) {
-      setCustomers(JSON.parse(savedCustomers))
-    }
-    if (savedBanner) {
-      setBannerText(savedBanner)
-    }
-  }, [])
 
   // Load customer info when mobile number changes
   useEffect(() => {
@@ -154,10 +96,10 @@ export default function GrameenMart() {
         return prevCart.map((item) =>
           item.id === productId && item.selectedUnit === selectedUnit
             ? {
-                ...item,
-                quantity: item.quantity - 1,
-                actualQuantity: item.actualQuantity - item.actualQuantity / item.quantity,
-              }
+              ...item,
+              quantity: item.quantity - 1,
+              actualQuantity: item.actualQuantity - item.actualQuantity / item.quantity,
+            }
             : item,
         )
       }
@@ -255,9 +197,7 @@ Thank you for choosing Grameen Mart! 🌿`
 
     const updatedCustomers = customers.filter((c) => c.mobile !== customerInfo.mobile)
     updatedCustomers.push(updatedCustomer)
-    setCustomers(updatedCustomers)
-    setCustomerInfo(updatedCustomer)
-    localStorage.setItem("grameenMartCustomers", JSON.stringify(updatedCustomers))
+    setAllCustomers(updatedCustomers)
 
     const message = generateWhatsAppMessage()
     const whatsappUrl = `https://wa.me/919744083698?text=${message}`
@@ -278,9 +218,9 @@ Thank you for choosing Grameen Mart! 🌿`
       <Toaster />
 
       {/* Banner */}
-      {bannerText && (
+      {banner && (
         <div className="bg-red-600 text-white text-center py-2 px-4">
-          <p className="text-sm font-medium">{bannerText}</p>
+          <p className="text-sm font-medium">{banner}</p>
         </div>
       )}
 
@@ -312,7 +252,7 @@ Thank you for choosing Grameen Mart! 🌿`
                 </div>
               )}
 
-              <Button variant="ghost" size="sm" onClick={loadProducts} className="text-white hover:bg-green-700">
+              <Button variant="ghost" size="sm" onClick={reloadProducts} className="text-white hover:bg-green-700">
                 <RefreshCw className="w-4 h-4" />
               </Button>
 
